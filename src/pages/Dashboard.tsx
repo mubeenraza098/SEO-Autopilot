@@ -27,7 +27,8 @@ const Dashboard: React.FC = () => {
     setActiveProject,
     addProject,
     showTabLimitModal,
-    setShowTabLimitModal
+    setShowTabLimitModal,
+    addConnection
   } = useProject();
   const { user, logout } = useAuth();
   const [auditRunning, setAuditRunning] = useState(false);
@@ -36,6 +37,16 @@ const Dashboard: React.FC = () => {
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [websiteName, setWebsiteName] = useState('');
   const [cmsType, setCmsType] = useState<'wordpress' | 'shopify' | 'custom'>('wordpress');
+  const [addWebsiteStep, setAddWebsiteStep] = useState(1);
+  const [websiteAccessGranted, setWebsiteAccessGranted] = useState(false);
+  const [gaAccessGranted, setGaAccessGranted] = useState(false);
+  const [gscAccessGranted, setGscAccessGranted] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationResults, setVerificationResults] = useState<{
+    website: boolean;
+    ga: boolean;
+    gsc: boolean;
+  } | null>(null);
 
   const mockKPIs: KPIWidget[] = [
     {
@@ -110,7 +121,53 @@ const Dashboard: React.FC = () => {
     setShowAddWebsiteModal(true);
   };
 
-  const handleAddWebsite = () => {
+  const handleGoogleAnalyticsAuth = async () => {
+    // Simulate OAuth flow
+    setVerifying(true);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    setGaAccessGranted(true);
+    setVerifying(false);
+  };
+
+  const handleGoogleSearchConsoleAuth = async () => {
+    // Simulate OAuth flow
+    setVerifying(true);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    setGscAccessGranted(true);
+    setVerifying(false);
+  };
+
+  const handleWebsiteAccess = async () => {
+    // Simulate website access verification
+    setVerifying(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    setWebsiteAccessGranted(true);
+    setVerifying(false);
+  };
+
+  const handleVerifyAccess = async () => {
+    setVerifying(true);
+    // Simulate verification process
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    const results = {
+      website: websiteAccessGranted,
+      ga: gaAccessGranted,
+      gsc: gscAccessGranted,
+    };
+    
+    setVerificationResults(results);
+    setVerifying(false);
+    
+    if (results.website && results.ga && results.gsc) {
+      // All verifications passed, create project
+      setTimeout(() => {
+        handleFinalAddWebsite();
+      }, 1000);
+    }
+  };
+
+  const handleFinalAddWebsite = () => {
     if (!websiteUrl || !websiteName) {
       return;
     }
@@ -123,13 +180,45 @@ const Dashboard: React.FC = () => {
       seo_score: Math.floor(Math.random() * 40) + 60,
     });
 
+    // Add connections for this project
+    addConnection({
+      project_id: newProject.id,
+      provider: 'ga4',
+      status: 'connected',
+      scopes: ['analytics.readonly']
+    });
+
+    addConnection({
+      project_id: newProject.id,
+      provider: 'gsc',
+      status: 'connected',
+      scopes: ['webmasters.readonly']
+    });
+
+    addConnection({
+      project_id: newProject.id,
+      provider: 'cms',
+      status: 'connected',
+      scopes: ['site.read', 'site.analyze']
+    });
+
     // Open the new project tab
     openProjectTab(newProject.id);
 
     // Reset form and close modal
+    resetAddWebsiteModal();
+  };
+
+  const resetAddWebsiteModal = () => {
     setWebsiteUrl('');
     setWebsiteName('');
     setCmsType('wordpress');
+    setAddWebsiteStep(1);
+    setWebsiteAccessGranted(false);
+    setGaAccessGranted(false);
+    setGscAccessGranted(false);
+    setVerifying(false);
+    setVerificationResults(null);
     setShowAddWebsiteModal(false);
   };
 
@@ -396,75 +485,277 @@ const Dashboard: React.FC = () => {
         {/* Add Website Modal */}
         {showAddWebsiteModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Add New Website</h2>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Add New Website</h2>
+                  <p className="text-sm text-gray-600">Step {addWebsiteStep} of 4</p>
+                </div>
                 <button
-                  onClick={() => setShowAddWebsiteModal(false)}
+                  onClick={resetAddWebsiteModal}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <X className="h-6 w-6" />
                 </button>
               </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Website Name
-                  </label>
-                  <input
-                    type="text"
-                    value={websiteName}
-                    onChange={(e) => setWebsiteName(e.target.value)}
-                    placeholder="My Awesome Website"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Website URL
-                  </label>
-                  <input
-                    type="url"
-                    value={websiteUrl}
-                    onChange={(e) => setWebsiteUrl(e.target.value)}
-                    placeholder="https://example.com"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    CMS Type
-                  </label>
-                  <select
-                    value={cmsType}
-                    onChange={(e) => setCmsType(e.target.value as 'wordpress' | 'shopify' | 'custom')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="wordpress">WordPress</option>
-                    <option value="shopify">Shopify</option>
-                    <option value="custom">Custom/Other</option>
-                  </select>
-                </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(addWebsiteStep / 4) * 100}%` }}
+                ></div>
               </div>
               
-              <div className="flex space-x-3 mt-6">
-                <button
-                  onClick={() => setShowAddWebsiteModal(false)}
-                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddWebsite}
-                  disabled={!websiteUrl || !websiteName}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Add Website
-                </button>
-              </div>
+              {/* Step 1: Website Details */}
+              {addWebsiteStep === 1 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900">Website Information</h3>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Website Name
+                    </label>
+                    <input
+                      type="text"
+                      value={websiteName}
+                      onChange={(e) => setWebsiteName(e.target.value)}
+                      placeholder="My Awesome Website"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Website URL
+                    </label>
+                    <input
+                      type="url"
+                      value={websiteUrl}
+                      onChange={(e) => setWebsiteUrl(e.target.value)}
+                      placeholder="https://example.com"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      CMS Type
+                    </label>
+                    <select
+                      value={cmsType}
+                      onChange={(e) => setCmsType(e.target.value as 'wordpress' | 'shopify' | 'custom')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="wordpress">WordPress</option>
+                      <option value="shopify">Shopify</option>
+                      <option value="custom">Custom/Other</option>
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end mt-6">
+                    <button
+                      onClick={() => setAddWebsiteStep(2)}
+                      disabled={!websiteUrl || !websiteName}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Google Analytics */}
+              {addWebsiteStep === 2 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900">Connect Google Analytics</h3>
+                  <p className="text-gray-600">
+                    Grant access to Google Analytics to track website performance and user behavior.
+                  </p>
+                  
+                  <div className={`p-4 rounded-lg border-2 ${gaAccessGranted ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        {gaAccessGranted ? (
+                          <CheckCircle className="h-6 w-6 text-green-500" />
+                        ) : (
+                          <Clock className="h-6 w-6 text-gray-400" />
+                        )}
+                        <div>
+                          <h4 className="font-medium">Google Analytics 4</h4>
+                          <p className="text-sm text-gray-600">Website traffic and performance data</p>
+                        </div>
+                      </div>
+                      {!gaAccessGranted && (
+                        <button
+                          onClick={handleGoogleAnalyticsAuth}
+                          disabled={verifying}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          {verifying ? 'Connecting...' : 'Connect'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between mt-6">
+                    <button
+                      onClick={() => setAddWebsiteStep(1)}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setAddWebsiteStep(3)}
+                      disabled={!gaAccessGranted}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Google Search Console */}
+              {addWebsiteStep === 3 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900">Connect Google Search Console</h3>
+                  <p className="text-gray-600">
+                    Grant access to Search Console to monitor SEO performance and search visibility.
+                  </p>
+                  
+                  <div className={`p-4 rounded-lg border-2 ${gscAccessGranted ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        {gscAccessGranted ? (
+                          <CheckCircle className="h-6 w-6 text-green-500" />
+                        ) : (
+                          <Clock className="h-6 w-6 text-gray-400" />
+                        )}
+                        <div>
+                          <h4 className="font-medium">Google Search Console</h4>
+                          <p className="text-sm text-gray-600">Search performance and indexing data</p>
+                        </div>
+                      </div>
+                      {!gscAccessGranted && (
+                        <button
+                          onClick={handleGoogleSearchConsoleAuth}
+                          disabled={verifying}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          {verifying ? 'Connecting...' : 'Connect'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between mt-6">
+                    <button
+                      onClick={() => setAddWebsiteStep(2)}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setAddWebsiteStep(4)}
+                      disabled={!gscAccessGranted}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Website Access & Verification */}
+              {addWebsiteStep === 4 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900">Website Access & Verification</h3>
+                  <p className="text-gray-600">
+                    Grant website access for data fetching and verify all connections.
+                  </p>
+                  
+                  <div className={`p-4 rounded-lg border-2 ${websiteAccessGranted ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        {websiteAccessGranted ? (
+                          <CheckCircle className="h-6 w-6 text-green-500" />
+                        ) : (
+                          <Clock className="h-6 w-6 text-gray-400" />
+                        )}
+                        <div>
+                          <h4 className="font-medium">Website Access</h4>
+                          <p className="text-sm text-gray-600">Direct access for SEO analysis</p>
+                        </div>
+                      </div>
+                      {!websiteAccessGranted && (
+                        <button
+                          onClick={handleWebsiteAccess}
+                          disabled={verifying}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          {verifying ? 'Verifying...' : 'Grant Access'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Verification Results */}
+                  {verificationResults && (
+                    <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                      <h4 className="font-medium text-gray-900 mb-3">Verification Results</h4>
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-3">
+                          {verificationResults.website ? (
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-red-500" />
+                          )}
+                          <span className="text-sm">Website Access</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          {verificationResults.ga ? (
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-red-500" />
+                          )}
+                          <span className="text-sm">Google Analytics</span>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          {verificationResults.gsc ? (
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-red-500" />
+                          )}
+                          <span className="text-sm">Google Search Console</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between mt-6">
+                    <button
+                      onClick={() => setAddWebsiteStep(3)}
+                      className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleVerifyAccess}
+                      disabled={!websiteAccessGranted || verifying}
+                      className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {verifying ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div>
+                          Verifying...
+                        </>
+                      ) : (
+                        'Verify & Add Website'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
